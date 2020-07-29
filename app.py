@@ -1,0 +1,252 @@
+import os
+from flask import Flask, render_template, request, make_response
+from flask_cors import CORS
+from pymongo import MongoClient
+from bson import ObjectId, json_util
+import re
+import http.client, urllib.request, urllib.parse, urllib.error, base64
+import requests
+#import json, jsonify
+#from flask import jsonify
+
+
+app = Flask(__name__, static_folder='C:/Users/User/Desktop/python component/data' )
+CORS(app)
+
+APP_ROOT = os.path.dirname(os.path.abspath(__file__))
+
+client = MongoClient("mongodb://admin:admin@cluster0-shard-00-00-zgcvy.mongodb.net:27017,cluster0-shard-00-01-zgcvy.mongodb.net:27017,cluster0-shard-00-02-zgcvy.mongodb.net:27017/test?ssl=true&replicaSet=Cluster0-shard-0&authSource=admin&retryWrites=true&w=majority")
+db = client.stylesearch
+#dbCollection = db.Style
+dbCollection = db.test
+users = db.users
+
+
+#the default app route
+@app.route("/")
+def index():
+ #   return render_template("upload.html")
+    return render_template("sidebar.html")
+
+#this is to insert into the database
+@app.route("/database", methods=['POST', 'GET'])
+def database():
+
+    dbCollection.insert({'ID' : '559', 'Garment Layer' : 'Top', 'Colour' : 'purple'})
+    return '<h1>Added a record! </h1>'
+
+
+#go and check the button when we click the button
+def contact():
+    if request.method == 'GET':
+        if request.form['dbadd'] == 'Add DB Value':
+            database()
+
+
+@app.route("/showAll", methods=['POST', 'GET'])
+def showAll():
+
+    data_to_return = []
+    for x in dbCollection.find():
+        data_to_return.append(x)
+    #return make_response(jsonify({data_to_return}))
+    #return json.dumps(data_to_return, indent=4, default=json_util.default)
+    return json(data_to_return, indent=4, default=json_util.default)
+
+@app.route("/showColour", methods=['POST', 'GET'])
+def showColor():
+    colourData = []
+    for x in dbCollection.find({"Colour" : "black"}):
+        colourData.append(x)
+
+    #return json.dumps(colourData, indent=4, default=json_util.default)
+    return json(colourData, indent=4, default=json_util.default)
+
+
+@app.route("/showColourID", methods=['POST', 'GET'])
+def showColorIDs():
+    colourData = []
+    for x in dbCollection.find({"Colour" : "red"}, {'_id': 0, 'Garment Layer' : 0, 'Colour' : 0}):
+        colourData.append(x)
+
+
+
+   # return json.dumps(colourData, indent=4, default=json_util.default)
+    return json(colourData, indent=4, default=json_util.default)
+
+@app.route("/test", methods=['POST', 'GET'])
+def test():
+    newarray = []
+    idthing = dbCollection.distinct("ID");
+
+    getNumResults = [x.strip() for x in str(idthing).split(',')]
+    numResults = (len(getNumResults))
+   # print(numResults)
+
+    for x in str(idthing).split(","):
+        x = x.replace("'","")
+        x = x.replace('[', "")
+        x = x.replace(" ", "")
+        x = x.replace(']', "")
+        newarray.append(x)
+
+
+    # imageID = 'data/544.jpeg'
+
+    imageID = str(newarray[3])
+
+    #for a in range (numResults):
+    #render_template('imageTemplate.html', value=imageID)
+
+   # return str(idthing)
+    return render_template('imageTemplate.html', value=imageID, value1 = str(newarray[1]),
+                           value2 = str(newarray[2]), value3 = newarray[0])
+
+   # return str(newarray[4])
+
+@app.route("/searchImageFromID", methods=['POST', 'GET'])
+def imageIDTest():
+    #imageID = 'data/544.jpeg'
+    imageID = '544'
+    return render_template('imageTemplate.html', value=imageID)
+
+
+    #return render_template("imageTemplate.html" % (var))
+
+
+
+#upload an image
+@app.route("/upload", methods=['POST'])
+def upload():
+    target = os.path.join(APP_ROOT, 'data/')
+    print(target)
+
+    if not os.path.isdir(target):
+        os.mkdir(target)
+
+    for file in request.files.getlist("file"):
+        print(file)
+        filename = file.filename
+        destination = "/".join([target, filename])
+        print(destination)
+        file.save(destination)
+
+    return render_template("complete.html")
+
+#use the mirrorLookAPI
+
+@app.route("/sim", methods=['POST', 'GET'])
+def mirrorLook():
+    headers = {
+        # Request headers
+        'Ocp-Apim-Subscription-Key': 'ba10a036532d4c438ded719c0f797a4e',
+        'Ocp-Apim-Subscription-Key': 'ba10a036532d4c438ded719c0f797a4e',
+    }
+
+    params = urllib.parse.urlencode({
+        # Request parameters
+        'image': 'https://contestimg.wish.com/api/webimage/5c394bfbe3e6604287a573da-large.jpg?cache_buster=276746c000af54b686498893ade2baea',
+        # 'gender': '{string}',
+         #'limit': '2',
+    })
+
+    conn = http.client.HTTPSConnection('api.mirrorthatlook.com')
+    conn.request("GET", "/v2/mirrorthatlook?%s" % params, "{body}", headers)
+    response = conn.getresponse()
+    data = response.read()
+    # print(data)
+
+    my_json = data.decode('utf8')
+    python_obj = json.loads(my_json)
+
+    loaded_json = json.dumps(my_json)
+    loaded_json = json.loads(my_json)
+
+    #print(loaded_json)
+    linksData = []
+    links = ((loaded_json["result"][0]["products"][0]["affiliates"][0]["link"]))
+    for x in range(10):
+        y = ((loaded_json["result"][0]["products"][x]["affiliates"][0]["link"]))
+        linksData.append(y)
+
+    # new_json = str(new_json).strip('[]')
+
+    #return links
+
+    return make_response(jsonify(linksData))
+    # ^ thiz returns the array i.e multiple links
+
+@app.route("/classification", methods=['POST', 'GET'])
+def classifyImage():
+    headers = {
+        # Request headers
+        'Ocp-Apim-Subscription-Key': 'ba10a036532d4c438ded719c0f797a4e',
+        'Ocp-Apim-Subscription-Key': 'ba10a036532d4c438ded719c0f797a4e',
+    }
+
+    params = urllib.parse.urlencode({
+        # Request parameters
+        'image': 'https://contestimg.wish.com/api/webimage/5c394bfbe3e6604287a573da-large.jpg?cache_buster=276746c000af54b686498893ade2baea',
+        # 'gender': '{string}',
+         #'limit': '2',
+    })
+
+    conn = http.client.HTTPSConnection('api.mirrorthatlook.com')
+    conn.request("GET", "/v2/mirrorthatlook?%s" % params, "{body}", headers)
+    response = conn.getresponse()
+    data = response.read()
+    # print(data)
+
+    my_json = data.decode('utf8')
+    python_obj = json.loads(my_json)
+
+    loaded_json = json.dumps(my_json)
+    loaded_json = json.loads(my_json)
+
+    # this works to classify the group that the item is in from the image
+    classification = ((loaded_json["result"][0]["group"]))
+
+    #return links
+    return  make_response(json(classification))
+    #return make_response(jsonify(classification))
+
+@app.route("/imgup", methods=['POST', 'GET'])
+def uploadImage():
+    import http.client, urllib.request, urllib.parse, urllib.error, base64
+
+    headers = {
+        # Request headers
+        'Ocp-Apim-Subscription-Key': 'ba10a036532d4c438ded719c0f797a4e',
+        'Ocp-Apim-Subscription-Key': 'ba10a036532d4c438ded719c0f797a4e',
+    }
+
+    params = urllib.parse.urlencode({
+        'image': 'data/43.jpeg',
+    })
+
+    try:
+        conn = http.client.HTTPSConnection('api.mirrorthatlook.com')
+        conn.request("POST", "/v2/upload_image?%s" % params, "{body}", headers)
+        response = conn.getresponse()
+        data = response.read()
+        print(data)
+        conn.close()
+    except Exception as e:
+        print("[Errno {0}] {1}".format(e.errno, e.strerror))
+
+        return data
+
+
+
+@app.route("/image", methods=['POST', 'GET'])
+def Image():
+    target = os.path.join(APP_ROOT, 'data/test.jpeg')
+    full_filename = 'data/2.jpeg'
+    print(full_filename)
+    print(target)
+
+    return render_template("image.html", user_image=full_filename)
+
+
+if __name__ == "__main__":
+    app.run(port=4555, debug=True)
